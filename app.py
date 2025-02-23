@@ -14,7 +14,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 conn_str = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
     "SERVER=EMILBAD;"
-    "DATABASE=MedicineDatabase;"
+    "DATABASE=PharmacyDBR;"
     "Trusted_Connection=yes;"
 )
 
@@ -56,11 +56,13 @@ async def get_db_connection():
 async def search_medicine_by_name(name_part: str):
     conn = await get_db_connection()
     if not conn:
+        logging.error("Ошибка подключения к базе данных")
         return None
+
     
     try:
         cursor = conn.cursor()
-        query = "SELECT Name FROM Medicines WHERE Name LIKE ?"
+        query = "SELECT Name FROM DrugBrand WHERE LOWER(Name) LIKE LOWER(?)"
         cursor.execute(query, (f"%{name_part}%",))
         rows = cursor.fetchall()
         return [row.Name for row in rows]
@@ -74,9 +76,26 @@ async def get_medicine_details(name: str):
     
     try:
         cursor = conn.cursor()
-        query = "SELECT * FROM Medicines WHERE Name = ?"
+        query = """
+            SELECT db.Name, asub.ATCCode, asub.SafetyForChildren, asub.SafetyForPregnancy, db.Composition
+            FROM DrugBrand db 
+            JOIN ActiveSubstance asub ON db.SubstanceID = asub.SubstanceID 
+            WHERE db.Name = ?
+        """
         cursor.execute(query, (name,))
-        return cursor.fetchone()
+        row = cursor.fetchone()
+        
+        if row:
+            details = {
+                'Name': row.Name,
+                'ATCCode': row.ATCCode,
+                'SafetyForChildren': row.SafetyForChildren,
+                'SafetyForPregnancy': row.SafetyForPregnancy,
+                'Composition': row.Composition
+            }
+            return details
+        else:
+            return None
     finally:
         conn.close()
 
@@ -194,26 +213,17 @@ async def select_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Ошибка получения данных.")
         return
     
-    context.user_data['selected_medicine'] = details.Name
+    context.user_data['selected_medicine'] = details['Name']
     
     keyboard = [
         [InlineKeyboardButton("Состав", callback_data="attr_Composition")],
-        [InlineKeyboardButton("Показания", callback_data="attr_Indications")],
-        [InlineKeyboardButton("Противопоказания", callback_data="attr_Contraindications")],
-        [InlineKeyboardButton("Побочные эффекты", callback_data="attr_SideEffects")],
-        [InlineKeyboardButton("Рекомендации по дозировке", callback_data="attr_Dosage")],
-        [InlineKeyboardButton("Передозировка", callback_data="attr_Overdose")],
-        [InlineKeyboardButton("Применение при беременности", callback_data="attr_PregnancyAndLactation")],
-        [InlineKeyboardButton("Особые указания", callback_data="attr_SpecialInstructions")],
-        [InlineKeyboardButton("Взаимодействие с другими лекарствами", callback_data="attr_DrugInteractions")],
-        [InlineKeyboardButton("Бюджетные аналоги", callback_data="attr_BudgetAlternatives")]
+        [InlineKeyboardButton("Безопасность для детей", callback_data="attr_SafetyForChildren")],
+        [InlineKeyboardButton("Безопасность при беременности", callback_data="attr_SafetyForPregnancy")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = f"*Название:* {escape_markdown(details.Name, version=2)}\n"
-    text += f"*Международное название:* {escape_markdown(details.InternationalName or 'Не указано', version=2)}\n"
-    text += f"*Код АТХ:* {escape_markdown(details.ATCCode or 'Не указано', version=2)}\n"
-    text += f"*Лекарственная форма:* {escape_markdown(details.DosageForm or 'Не указано', version=2)}"
+    text = f"*Название:* {escape_markdown(details['Name'], version=2)}\n"
+    text += f"*Код ATX:* {escape_markdown(details.get('ATCCode', 'Не указано'), version=2)}"
     
     await query.edit_message_text(text, parse_mode='MarkdownV2', reply_markup=reply_markup)
 
@@ -224,15 +234,9 @@ async def show_attribute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     attr = query.data.replace("attr_", "")
     attr_names = {
         "Composition": "Состав",
-        "Indications": "Показания",
-        "Contraindications": "Противопоказания",
-        "SideEffects": "Побочные эффекты",
-        "Dosage": "Рекомендации по дозировке",
-        "Overdose": "Передозировка",
-        "PregnancyAndLactation": "Применение при беременности",
-        "SpecialInstructions": "Особые указания",
-        "DrugInteractions": "Взаимодействие с другими лекарствами",
-        "BudgetAlternatives": "Бюджетные аналоги"
+        "ATCCode": "Код АТХ",
+        "SafetyForChildren": "Безопасность для детей",
+        "SafetyForPregnancy": "Безопасность при беременности"
     }
     
     name = context.user_data.get('selected_medicine')
@@ -242,10 +246,17 @@ async def show_attribute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Ошибка получения данных.")
         return
     
-    text = f"*{attr_names.get(attr, attr)}:* {escape_markdown(getattr(details, attr, 'Нет данных'), version=2)}"
+    attribute_value = details.get(attr, 'Нет данных')
+    
+    
+    text = f"*{attr_names.get(attr, attr)}:* {escape_markdown(attribute_value, version=2)}"
+    
+    
     keyboard = [[InlineKeyboardButton("Назад", callback_data="select_" + name)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, parse_mode='MarkdownV2', reply_markup=reply_markup)
+    
+    if query.message.text != text:
+        await query.edit_message_text(text, parse_mode='MarkdownV2', reply_markup=reply_markup)
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
