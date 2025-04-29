@@ -100,13 +100,12 @@ async def get_medicine_details(name: str):
         conn.close()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("🔍 Поиск лекарства")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Привет! Нажмите '🔍 Поиск лекарства' для начала поиска.", reply_markup=reply_markup)
-
-async def request_medicine_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Введите название лекарства:")
+    await update.message.reply_text("Введите название лекарственного средства:")
     context.user_data[SEARCHING_MEDICINE] = True
+
+# async def request_medicine_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     await update.message.reply_text("Введите название лекарства:")
+#     context.user_data[SEARCHING_MEDICINE] = True
 
     
 async def receive_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -191,12 +190,12 @@ async def receive_medicine_name(update: Update, context: ContextTypes.DEFAULT_TY
     if not context.user_data.get(SEARCHING_MEDICINE):
         return
     
-    context.user_data[SEARCHING_MEDICINE] = False
+    context.user_data[SEARCHING_MEDICINE] = True
     name_part = update.message.text
     results = await search_medicine_by_name(name_part)
     
     if not results:
-        await update.message.reply_text("Лекарство не найдено.")
+        await update.message.reply_text("Лекарственное средство не найдено.")
         return
     
     keyboard = [[InlineKeyboardButton(name, callback_data=f"select_{name}")] for name in results]
@@ -261,7 +260,7 @@ async def show_attribute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Text("🔍 Поиск лекарства"), request_medicine_name))
+    # application.add_handler(MessageHandler(filters.Text("🔍 Поиск лекарства"), request_medicine_name))
     application.add_handler(CallbackQueryHandler(button_callback, pattern="^(back|cancel)$"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_medicine_name))
     application.add_handler(CallbackQueryHandler(select_medicine, pattern="^select_"))
