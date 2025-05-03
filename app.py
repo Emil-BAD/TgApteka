@@ -6,6 +6,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
 from telegram.helpers import escape_markdown
+from telegram import BotCommandScopeDefault
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -206,7 +207,6 @@ async def select_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     name = query.data.replace("select_", "")
     details = await get_medicine_details(name)
-    print(details)
     
     if not details:
         await query.edit_message_text("Ошибка получения данных.")
@@ -257,12 +257,18 @@ async def show_attribute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.message.text != text:
         await query.edit_message_text(text, parse_mode='MarkdownV2', reply_markup=reply_markup)
 
+async def post_init(application):
+    # Удаляем команды из меню
+    await application.bot.delete_my_commands(scope=BotCommandScopeDefault())
+    await application.bot.set_chat_menu_button()
+
 if __name__ == '__main__':
-    application = ApplicationBuilder().token(TOKEN).build()
+    application = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+
     application.add_handler(CommandHandler("start", start))
-    # application.add_handler(MessageHandler(filters.Text("🔍 Поиск лекарства"), request_medicine_name))
     application.add_handler(CallbackQueryHandler(button_callback, pattern="^(back|cancel)$"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_medicine_name))
     application.add_handler(CallbackQueryHandler(select_medicine, pattern="^select_"))
     application.add_handler(CallbackQueryHandler(show_attribute, pattern="^attr_"))
+
     application.run_polling()
