@@ -14,7 +14,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 conn_str = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
     "SERVER=EMILBAD;"
-    "DATABASE=PharmacyDBR;"
+    "DATABASE=MedicineDatabase;"
     "Trusted_Connection=yes;"
 )
 
@@ -62,7 +62,7 @@ async def search_medicine_by_name(name_part: str):
     
     try:
         cursor = conn.cursor()
-        query = "SELECT Name FROM DrugBrand WHERE LOWER(Name) LIKE LOWER(?)"
+        query = "SELECT Name FROM Medicines WHERE LOWER(Name) LIKE LOWER(?)"
         cursor.execute(query, (f"%{name_part}%",))
         rows = cursor.fetchall()
         return [row.Name for row in rows]
@@ -77,10 +77,9 @@ async def get_medicine_details(name: str):
     try:
         cursor = conn.cursor()
         query = """
-            SELECT db.Name, asub.ATCCode, asub.SafetyForChildren, asub.SafetyForPregnancy, db.Composition
-            FROM DrugBrand db 
-            JOIN ActiveSubstance asub ON db.SubstanceID = asub.SubstanceID 
-            WHERE db.Name = ?
+            SELECT Name, ATCCode, ApplicationInChildren, PregnancyAndLactation, Composition
+            FROM Medicines db
+            WHERE Name = ?
         """
         cursor.execute(query, (name,))
         row = cursor.fetchone()
@@ -89,8 +88,8 @@ async def get_medicine_details(name: str):
             details = {
                 'Name': row.Name,
                 'ATCCode': row.ATCCode,
-                'SafetyForChildren': row.SafetyForChildren,
-                'SafetyForPregnancy': row.SafetyForPregnancy,
+                'ApplicationInChildren': row.ApplicationInChildren,
+                'PregnancyAndLactation': row.PregnancyAndLactation,
                 'Composition': row.Composition
             }
             return details
@@ -207,6 +206,7 @@ async def select_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     name = query.data.replace("select_", "")
     details = await get_medicine_details(name)
+    print(details)
     
     if not details:
         await query.edit_message_text("Ошибка получения данных.")
@@ -216,8 +216,8 @@ async def select_medicine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("Состав", callback_data="attr_Composition")],
-        [InlineKeyboardButton("Безопасность для детей", callback_data="attr_SafetyForChildren")],
-        [InlineKeyboardButton("Безопасность при беременности", callback_data="attr_SafetyForPregnancy")]
+        [InlineKeyboardButton("Безопасность для детей", callback_data="attr_ApplicationInChildren")],
+        [InlineKeyboardButton("Безопасность при беременности", callback_data="attr_PregnancyAndLactation")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -234,8 +234,8 @@ async def show_attribute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     attr_names = {
         "Composition": "Состав",
         "ATCCode": "Код АТХ",
-        "SafetyForChildren": "Безопасность для детей",
-        "SafetyForPregnancy": "Безопасность при беременности"
+        "ApplicationInChildren": "Безопасность для детей",
+        "PregnancyAndLactation": "Безопасность при беременности"
     }
     
     name = context.user_data.get('selected_medicine')
